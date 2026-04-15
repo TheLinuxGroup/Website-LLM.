@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatAI | Local Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+        body { font-family: 'Outfit', sans-serif; background-color: #050505; color: #f4f4f5; }
+        .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .glass { background: rgba(15, 15, 20, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); }
+        .ai-bubble { background: #18181b; border: 1px solid #27272a; border-radius: 1.5rem; border-top-left-radius: 0.2rem; }
+        .user-bubble { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 1.5rem; border-top-right-radius: 0.2rem; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+        pre { background: #000; padding: 1rem; border-radius: 0.75rem; border: 1px solid #27272a; margin: 1rem 0; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; }
+        .model-btn.active { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
+        @keyframes typing { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+        .dot { animation: typing 1.4s infinite; }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 z-30 hidden md:hidden"></div>
+    
+    <aside id="sidebar" class="fixed md:relative w-72 h-full glass border-r border-zinc-800 flex flex-col z-40 sidebar-transition -translate-x-full md:translate-x-0">
+        <div class="p-6 flex items-center justify-between">
+            <div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">ChatAI</h1>
+                <p class="text-[10px] text-zinc-500 tracking-widest font-bold uppercase">Private Inference</p>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden text-zinc-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+
+        <div class="px-4 flex-1 overflow-y-auto custom-scroll space-y-6">
+            <div>
+                <label class="text-[10px] text-zinc-500 font-black px-2 uppercase tracking-tighter">Choose Engine</label>
+                <div class="mt-3 space-y-1">
+                    <button onclick="changeModel('Llama-3.2-1B-Instruct-q4f16_1-MLC')" id="llama-btn" class="model-btn active w-full flex items-center gap-3 p-3 rounded-xl border border-transparent transition-all">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <div class="text-left"><p class="text-sm font-semibold">Llama 3.2</p><p class="text-[10px] opacity-50 text-white">Ultra-Fast 1B</p></div>
+                    </button>
+                    <button onclick="changeModel('gemma-2-2b-it-q4f16_1-MLC')" id="gemma-btn" class="model-btn w-full flex items-center gap-3 p-3 rounded-xl border border-transparent transition-all">
+                        <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+                        <div class="text-left"><p class="text-sm font-semibold">Gemma 2</p><p class="text-[10px] opacity-50 text-white">Creative 2B</p></div>
+                    </button>
+                    <button onclick="changeModel('Phi-3.5-mini-instruct-q4f16_1-MLC')" id="phi-btn" class="model-btn w-full flex items-center gap-3 p-3 rounded-xl border border-transparent transition-all">
+                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <div class="text-left"><p class="text-sm font-semibold">Phi 3.5</p><p class="text-[10px] opacity-50 text-white">Reasoning Mini</p></div>
+                    </button>
+                </div>
+            </div>
+
+            <div id="progress-container" class="hidden px-2">
+                <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
+                    <span id="load-status">Preparing Engine...</span>
+                    <span id="load-val">0%</span>
+                </div>
+                <div class="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div id="load-fill" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-zinc-800 space-y-2">
+            <button onclick="exportChat()" class="w-full py-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors border border-zinc-800 rounded-lg">
+                <i class="fa-solid fa-download mr-2"></i>Export Session
+            </button>
+            <button onclick="localStorage.clear(); location.reload();" class="w-full py-2 text-xs font-semibold text-red-400/60 hover:text-red-400 transition-colors border border-red-900/10 rounded-lg">
+                <i class="fa-solid fa-trash mr-2"></i>Wipe All Data
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col relative min-w-0 h-full">
+        <header class="h-16 flex items-center justify-between px-6 border-b border-zinc-800/50 glass z-20">
+            <button onclick="toggleSidebar()" class="md:hidden text-zinc-400 p-2 -ml-2"><i class="fa-solid fa-bars-staggered text-xl"></i></button>
+            <div class="flex items-center gap-3">
+                <div id="engine-dot" class="w-2 h-2 rounded-full bg-zinc-600"></div>
+                <span id="engine-label" class="text-xs font-bold tracking-widest text-zinc-400 uppercase">Engine Standby</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="hidden sm:inline text-[10px] font-bold text-zinc-500 border border-zinc-800 px-2 py-1 rounded">WEBGPU 2.0</span>
+            </div>
+        </header>
+
+        <div id="chat-scroller" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scroll scroll-smooth">
+            <div id="hero" class="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto opacity-40">
+                <div class="w-16 h-16 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 border border-zinc-800 shadow-2xl">
+                    <i class="fa-solid fa-shield-cat text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Zero-Server AI</h2>
+                <p class="text-xs leading-relaxed">No accounts. No APIs. No tracking. This website downloads the AI once and runs it on your graphics card.</p>
+            </div>
+        </div>
+
+        <div class="p-4 md:p-8 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent">
+            <div class="max-w-4xl mx-auto relative">
+                <textarea id="user-input" rows="1" class="w-full glass rounded-2xl py-4 pl-6 pr-14 focus:outline-none focus:border-blue-500/50 transition-all resize-none shadow-2xl text-sm" placeholder="Ask ChatAI anything..."></textarea>
+                <button onclick="sendMessage()" class="absolute right-3 bottom-3 w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center hover:bg-blue-500 transition-colors shadow-lg shadow-blue-900/20 active:scale-95">
+                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+            </div>
+            <p id="gpu-error" class="text-center text-[10px] text-red-500 mt-3 font-bold uppercase hidden">WebGPU not detected. Use Chrome or Edge.</p>
+        </div>
+    </main>
+
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+        let engine;
+        let activeModelId = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+        const input = document.getElementById('user-input');
+        const scroller = document.getElementById('chat-scroller');
+
+        if (!navigator.gpu) document.getElementById('gpu-error').classList.remove('hidden');
+
+        window.toggleSidebar = () => {
+            const side = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            side.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        };
+
+        window.changeModel = (id) => {
+            activeModelId = id;
+            document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+            if(id.includes('Llama')) document.getElementById('llama-btn').classList.add('active');
+            if(id.includes('gemma')) document.getElementById('gemma-btn').classList.add('active');
+            if(id.includes('Phi')) document.getElementById('phi-btn').classList.add('active');
+            if(engine) { engine.unload(); engine = null; }
+            initEngine();
+        };
+
+        async function initEngine() {
+            document.getElementById('progress-container').classList.remove('hidden');
+            document.getElementById('engine-label').innerText = "Loading " + activeModelId.split('-')[0] + "...";
+            engine = new webllm.MLCEngine();
+            engine.setInitProgressCallback((p) => {
+                document.getElementById('load-fill').style.width = (p.progress * 100) + "%";
+                document.getElementById('load-val').innerText = Math.round(p.progress * 100) + "%";
+                if(p.progress === 1) {
+                    document.getElementById('progress-container').classList.add('hidden');
+                    document.getElementById('engine-dot').classList.replace('bg-zinc-600', 'bg-blue-500');
+                    document.getElementById('engine-label').innerText = activeModelId.split('-')[0] + " Ready";
+                }
+            });
+            await engine.reload(activeModelId);
+        }
+
+        window.sendMessage = async () => {
+            const text = input.value.trim();
+            if(!text) return;
+            if(!engine) await initEngine();
+
+            document.getElementById('hero')?.remove();
+            appendMsg('user', text);
+            input.value = '';
+            input.style.height = 'auto';
+
+            const container = appendMsg('ai', '<span class="dot">.</span><span class="dot" style="animation-delay:0.2s">.</span><span class="dot" style="animation-delay:0.4s">.</span>');
+            const target = container.querySelector('.content');
+            
+            let response = "";
+            const stream = await engine.chat.completions.create({ messages: [{role: "user", content: text}], stream: true });
+            
+            for await (const chunk of stream) {
+                response += chunk.choices[0]?.delta?.content || "";
+                target.innerHTML = marked.parse(response);
+                scroller.scrollTop = scroller.scrollHeight;
+            }
+        };
+
+        function appendMsg(role, content) {
+            const wrap = document.createElement('div');
+            wrap.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`;
+            wrap.innerHTML = `
+                <div class="max-w-[90%] md:max-w-[75%] p-4 md:p-6 ${role === 'user' ? 'user-bubble text-white shadow-xl shadow-blue-900/10' : 'ai-bubble text-zinc-200'}">
+                    <div class="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">${role}</div>
+                    <div class="content text-sm md:text-base leading-relaxed prose prose-invert">${content}</div>
+                </div>
+            `;
+            scroller.appendChild(wrap);
+            scroller.scrollTop = scroller.scrollHeight;
+            return wrap;
+        }
+
+        window.exportChat = () => {
+            const log = Array.from(document.querySelectorAll('.content')).map(c => c.innerText).join('\n\n---\n\n');
+            const blob = new Blob([log], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `chatai-session-${Date.now()}.txt`;
+            a.click();
+        };
+
+        input.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if(e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
+                e.preventDefault(); sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
